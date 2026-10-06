@@ -1,4 +1,4 @@
-# Nexus Broker - Ultra-Fast C++ HFT Client
+# Nexus Broker - Low-Latency C++ Trading Client
 
 This project is a high-performance C++ port of the Shoonya/Noren API. It is designed for High-Frequency Trading (HFT) with an emphasis on extremely low latency, lock-free concurrency, and zero-copy JSON parsing.
 
