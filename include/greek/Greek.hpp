@@ -8,8 +8,6 @@
 
 namespace nexus::greek {
 
-constexpr double r = 0.07;
-
 [[nodiscard]] inline double norm_cdf(double x) {
   return 0.5 * std::erfc(-x / std::sqrt(2.0));
 }
@@ -40,7 +38,7 @@ constexpr double r = 0.07;
   if (T <= 0.0 || V <= 0.0)
     return 0.0;
   double d1 = (std::log(S / K) + (r + V * V / 2.0) * T) / (V * std::sqrt(T));
-  return S * norm_pdf(d1) * std::sqrt(T);
+  return S * norm_pdf(d1) * std::sqrt(T) * 0.01;
 }
 
 [[nodiscard]] inline double bs_delta(char type, double S, double K, double T,
