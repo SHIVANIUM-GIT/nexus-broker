@@ -2,18 +2,20 @@
 #include "shoonyacpp/aliases.hpp"
 #include "shoonyacpp/shoonya.hpp"
 #include "shoonyacpp/websocket.hpp"
+#include "engine/RealtimeEngine.hpp"
+#include "engine/OptionSymbolManager.hpp"
 
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
 #include <thread>
-
-#include "greek/Greek.hpp"
 #include <iomanip>
+#include <fstream>
+#include <sstream>
 #include <map>
 
 using namespace shoonyacpp;
-using namespace nexus::greek;
+using namespace nexus::engine;
 
 double calculate_time_to_expiry(int expiry_year, int expiry_month, int expiry_day) {
     auto now = std::chrono::system_clock::now();
@@ -30,30 +32,41 @@ double calculate_time_to_expiry(int expiry_year, int expiry_month, int expiry_da
     return std::max(days_to_expiry / 365.0, 0.0001); // Prevent 0 or negative DTE
 }
 
-void print_chain(const OptionChain &chain) {
-  std::cout << "\n--- LIVE OPTION CHAIN (Underlying: " << chain.underlying_price
-            << ") ---\n";
-  std::cout << std::fixed << std::setprecision(4);
-  for (const auto &row : chain.rows) {
-    std::cout << "STRIKE: " << row.strike << "\n";
-    std::cout << "  CALL [Price: " << row.call.price
-              << " | IV: " << row.call.greeks.iv * 100
-              << "% | Delta: " << row.call.greeks.delta
-              << " | Gamma: " << row.call.greeks.gamma
-              << " | Theta: " << row.call.greeks.theta
-              << " | Vega: " << row.call.greeks.vega << "]\n";
-    std::cout << "  PUT  [Price: " << row.put.price
-              << " | IV: " << row.put.greeks.iv * 100
-              << "% | Delta: " << row.put.greeks.delta
-              << " | Gamma: " << row.put.greeks.gamma
-              << " | Theta: " << row.put.greeks.theta
-              << " | Vega: " << row.put.greeks.vega << "]\n";
-  }
-  std::cout << "--------------------------------------------------\n";
+void print_realtime_chain(OptionChainManager& chain_mgr) {
+    std::cout << "\n--- LIVE REALTIME OPTION CHAIN (Underlying: " << chain_mgr.get_underlying_ltp() << ") ---\n";
+    std::cout << std::fixed << std::setprecision(4);
+    auto all_options = chain_mgr.get_all_options();
+    
+    // Group by strike
+    std::map<double, std::pair<OptionData, OptionData>> grouped;
+    for (const auto& opt : all_options) {
+        if (opt.type == 'C') grouped[opt.strike].first = opt;
+        else grouped[opt.strike].second = opt;
+    }
+
+    for (const auto& [strike, pair] : grouped) {
+        const auto& call = pair.first;
+        const auto& put = pair.second;
+        
+        std::cout << "STRIKE: " << strike << "\n";
+        std::cout << "  CALL [Price: " << call.market_data.ltp
+                  << " | IV: " << call.greeks.iv * 100
+                  << "| Delta: " << call.greeks.delta
+                  << " | Gamma: " << call.greeks.gamma
+                  << " | Theta: " << call.greeks.theta
+                  << " | Vega: " << call.greeks.vega << "]\n";
+        std::cout << "  PUT  [Price: " << put.market_data.ltp
+                  << " | IV: " << put.greeks.iv * 100
+                  << "% | Delta: " << put.greeks.delta
+                  << " | Gamma: " << put.greeks.gamma
+                  << " | Theta: " << put.greeks.theta
+                  << " | Vega: " << put.greeks.vega << "]\n";
+    }
+    std::cout << "--------------------------------------------------\n";
 }
 
 int main() {
-  std::cout << "Starting Nexus Broker Engine (with Live Greeks)...\n";
+  std::cout << "Starting Nexus Broker Realtime Greeks Engine...\n";
 
   try {
     load_dotenv(".env");
@@ -69,12 +82,10 @@ int main() {
   NorenRestApi api("https://api.shoonya.com/NorenWClientAPI");
 
   if (!access_token.empty()) {
-    std::cout << "[INFO] Using existing ACCESS_TOKEN from .env for user: "
-              << user_id << '\n';
+    std::cout << "[INFO] Using existing ACCESS_TOKEN from .env for user: " << user_id << '\n';
     api.set_session(user_id, access_token);
   } else if (!auth_code.empty()) {
-    bool logged_in =
-        api.get_access_token(auth_code, secret_key, user_id + "_U", user_id);
+    bool logged_in = api.get_access_token(auth_code, secret_key, user_id + "_U", user_id);
     if (!logged_in) {
       std::cerr << "CRITICAL: Failed to login with AUTH_CODE!\n";
       return 1;
@@ -84,58 +95,56 @@ int main() {
     return 1;
   }
 
+  // Verify token before starting WebSocket
+  std::string response;
+  std::string jData = "jData={\"uid\":\"" + api.get_credentials().user_id + "\"}";
+  if (!api.post_request("/UserDetails", jData, &response)) {
+      std::cerr << "CRITICAL: Access token is invalid or expired! Cannot start WebSocket.\n";
+      return 1;
+  }
+  std::cout << "[INFO] Token verified successfully.\n";
+
   NorenWebsocket ws("wss://api.shoonya.com/NorenWSAPI/", api.get_credentials());
 
-  // Set up the OptionChain for expiry dynamically (e.g., Oct 26, 2026)
-  double time_to_expiry = calculate_time_to_expiry(2026, 10, 26);
-  double risk_free_rate = 0.1;
+  // Set up the Realtime Engine for NIFTY 50 Index
+  // Underlying Token: NSE|26000 (Nifty 50), Strike interval: 50
+  RealtimeEngine engine(ws, "NSE|26000", 50);
 
-  ws.set_on_tick_callback(
-      [time_to_expiry, risk_free_rate](const std::string &tick) {
-        std::cout << "\n[LIVE DATA] " << tick << std::endl;
-        // Parse the live websocket tick for "lp" (last price)
-        // Shoonya JSON tick example:
-        // {"t":"tf","e":"NSE","tk":"26000","lp":"24000.50"}
-        auto pos = tick.find("\"lp\":\"");
-        if (pos == std::string::npos) {
-          // Also check if it's sent as a raw float
-          pos = tick.find("\"lp\":");
-          if (pos != std::string::npos)
-            pos += 5; // length of "lp":
-        } else {
-          pos += 6; // length of "lp":"
-        }
+  // Load Options Symbol Master Dynamically
+  OptionSymbolManager sym_mgr("NIFTY");
+  if (!sym_mgr.initialize()) {
+      std::cerr << "CRITICAL: Failed to initialize option symbols. Exiting...\n";
+      return 1;
+  }
 
-        if (pos != std::string::npos) {
-          auto end = tick.find_first_of(",\"}", pos);
-          if (end != std::string::npos) {
-            try {
-              double underlying_lp = std::stod(tick.substr(pos, end - pos));
+  engine.set_instrument_mapper([&sym_mgr](double strike, const std::string& type) -> std::string {
+      return sym_mgr.get_token(strike, type[0]);
+  });
 
-              // Create a dynamic OptionChain with the LIVE underlying price
-              OptionChain chain(underlying_lp, time_to_expiry, risk_free_rate);
-
-              // Add some arbitrary strikes around the live underlying price
-              // Normally, you would fetch these market prices dynamically as
-              // well
-              double strike1 = std::round(underlying_lp / 100.0) * 100.0;
-              double strike2 = strike1 + 100.0;
-              print_chain(chain);
-
-            } catch (...) {
-              // Ignore parsing errors for live ticks
-            }
-          }
-        }
-      });
+  auto [exp_y, exp_m, exp_d] = sym_mgr.get_nearest_expiry_date();
+  double time_to_expiry = calculate_time_to_expiry(exp_y, exp_m, exp_d);
+  double risk_free_rate = 0.05;
 
   ws.connect();
-  // Subscribe to NIFTY 50 Index for the underlying live feed
-  ws.subscribe("NSE|26000");
+  std::this_thread::sleep_for(std::chrono::seconds(2)); // wait for connection to establish
 
-  std::cout << "Listening to Websocket Ticks for NSE|26000...\n";
+  engine.start(time_to_expiry, risk_free_rate);
+
+  std::cout << "Listening to Websocket Ticks for NSE|26000 and Options...\n";
+  
+  // A simple background thread to print chain every 1 second for observation
+  std::thread printer([&engine]() {
+      while(true) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(500)); // MUST have sleep to prevent CPU/console crash!
+          print_realtime_chain(engine.get_chain_manager());
+      }
+  });
+
   std::this_thread::sleep_for(std::chrono::hours(6));
 
+  engine.stop();
   ws.disconnect();
+  
+  printer.detach();
   return 0;
 }

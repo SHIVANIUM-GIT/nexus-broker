@@ -16,6 +16,7 @@ public:
   void connect();
   void disconnect();
   void subscribe(const std::string &instrument);
+  void unsubscribe(const std::string &instrument);
 
   void set_on_tick_callback(
       std::function<void(const std::string &tick_json)> callback);

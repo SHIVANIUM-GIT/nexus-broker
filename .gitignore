@@ -15,3 +15,6 @@ compile_commands.json
 .vscode/
 .idea/
 *.swp
+NFO_symbols.txt.zip
+.gitignore
+NFO_symbols.txt

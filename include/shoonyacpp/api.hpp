@@ -57,6 +57,7 @@ private:
 
   void *http_session_;
 
+public:
   bool post_request(const std::string &route, const std::string &jData,
                     std::string *out_response = nullptr);
 };

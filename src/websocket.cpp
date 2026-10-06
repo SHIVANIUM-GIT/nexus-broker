@@ -9,6 +9,9 @@
 #include <iostream>
 #include <thread>
 #include <string>
+#include <sstream>
+#include <iomanip>
+#include <openssl/sha.h>
 
 namespace beast = boost::beast;
 namespace http = beast::http;
@@ -73,10 +76,9 @@ void NorenWebsocket::connect() {
         impl->ws->handshake(host, path);
         std::cout << "[WS] Successfully connected to Shoonya (Boost.Beast TLS)\n";
 
-        // Send Login frame
-        std::string login_json = "{\"t\":\"c\",\"uid\":\"" + credentials_.user_id + 
+        std::string login_json = "{\"t\":\"a\",\"uid\":\"" + credentials_.user_id + 
                                  "\",\"actid\":\"" + credentials_.user_id + 
-                                 "\",\"source\":\"API\",\"susertoken\":\"" + credentials_.access_token + "\"}";
+                                 "\",\"source\":\"API\",\"accesstoken\":\"" + credentials_.access_token + "\"}";
         
         impl->ws->write(net::buffer(login_json));
 
@@ -100,14 +102,14 @@ void NorenWebsocket::connect() {
 }
 
 void NorenWebsocket::disconnect() {
-  if (!is_running_) return;
-
   is_running_ = false;
   auto impl = static_cast<NorenWebsocketImpl*>(ws_session_);
   
-  if (impl->ws) {
+  if (impl && impl->ws) {
       try {
-          impl->ws->close(websocket::close_code::normal);
+          boost::system::error_code ec;
+          impl->ws->next_layer().next_layer().cancel(ec);
+          impl->ws->next_layer().next_layer().close(ec);
       } catch(...) {}
   }
 
@@ -124,12 +126,26 @@ void NorenWebsocket::set_on_tick_callback(
 void NorenWebsocket::subscribe(const std::string &instrument) {
   if (!is_running_) return;
   auto impl = static_cast<NorenWebsocketImpl*>(ws_session_);
+  if (!impl || !impl->ws) return;
   
   std::string sub_json = "{\"t\":\"t\",\"k\":\"" + instrument + "\"}";
   try {
       impl->ws->write(net::buffer(sub_json));
   } catch(std::exception const& e) {
       std::cerr << "[WS SUBSCRIBE ERROR] " << e.what() << "\n";
+  }
+}
+
+void NorenWebsocket::unsubscribe(const std::string &instrument) {
+  if (!is_running_) return;
+  auto impl = static_cast<NorenWebsocketImpl*>(ws_session_);
+  if (!impl || !impl->ws) return;
+  
+  std::string unsub_json = "{\"t\":\"u\",\"k\":\"" + instrument + "\"}";
+  try {
+      impl->ws->write(net::buffer(unsub_json));
+  } catch(std::exception const& e) {
+      std::cerr << "[WS UNSUBSCRIBE ERROR] " << e.what() << "\n";
   }
 }
 

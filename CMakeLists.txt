@@ -47,6 +47,8 @@ add_library(nexus_broker
     src/websocket.cpp
     src/oms/RiskManager.cpp
     src/oms/OrderManager.cpp
+    src/engine/RealtimeEngine.cpp
+    src/engine/OptionSymbolManager.cpp
 )
 
 # Tell the compiler where our header files (.hpp) live
@@ -56,7 +58,7 @@ find_package(OpenSSL REQUIRED)
 find_package(Boost REQUIRED COMPONENTS system thread)
 
 # Link the blazing fast libraries to our broker
-target_link_libraries(nexus_broker PRIVATE
+target_link_libraries(nexus_broker PUBLIC
     cpr::cpr
     simdjson::simdjson
     Boost::system
@@ -69,5 +71,19 @@ target_link_libraries(nexus_broker PRIVATE
 # BUILD OUR TRADING ENGINE EXECUTABLE
 # ---------------------------------------------------------
 add_executable(nexus_engine examples/main.cpp)
-target_link_libraries(nexus_engine PRIVATE nexus_broker)
+target_link_libraries(nexus_engine PRIVATE nexus_broker simdjson::simdjson)
 
+# ---------------------------------------------------------
+# TESTS
+# ---------------------------------------------------------
+add_executable(test_engine tests/test_engine.cpp)
+target_link_libraries(test_engine PRIVATE nexus_broker simdjson::simdjson)
+
+add_executable(benchmark_engine tests/benchmark_engine.cpp)
+target_link_libraries(benchmark_engine PRIVATE nexus_broker simdjson::simdjson)
+
+add_executable(benchmark_real_ws tests/benchmark_real_ws.cpp)
+target_link_libraries(benchmark_real_ws PRIVATE nexus_broker simdjson::simdjson)
+
+add_executable(test_token tests/test_token.cpp)
+target_link_libraries(test_token PRIVATE nexus_broker)
