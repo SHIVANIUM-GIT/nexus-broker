@@ -1,0 +1,17 @@
+# CMake build directories
+build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+
+# Python environment and configs
+.venv/
+.env
+.python-version
+.cache/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
