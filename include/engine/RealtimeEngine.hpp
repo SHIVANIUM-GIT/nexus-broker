@@ -38,7 +38,7 @@ public:
     RealtimeEngine(shoonyacpp::NorenWebsocket& ws, const std::string& underlying_token, int strike_interval);
     ~RealtimeEngine();
 
-    void start(double time_to_expiry, double risk_free_rate = 0.01);
+    void start(double time_to_expiry, double risk_free_rate);
     void stop();
 
     void on_tick(const std::string& tick_json);

@@ -18,7 +18,7 @@ struct OptionData {
 
 class OptionChainManager {
 public:
-    OptionChainManager(double time_to_expiry, double risk_free_rate = 0.01)
+    OptionChainManager(double time_to_expiry, double risk_free_rate)
         : tte_(time_to_expiry), r_(risk_free_rate), underlying_ltp_(0.0) {}
 
     void set_underlying_ltp(double spot) {
