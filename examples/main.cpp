@@ -123,7 +123,7 @@ int main() {
 
   auto [exp_y, exp_m, exp_d] = sym_mgr.get_nearest_expiry_date();
   double time_to_expiry = calculate_time_to_expiry(exp_y, exp_m, exp_d);
-  double risk_free_rate = 0.05;
+  constexpr double risk_free_rate = 0.072; // India 10-year G-Sec yield
 
   ws.connect();
   std::this_thread::sleep_for(std::chrono::seconds(2)); // wait for connection to establish
