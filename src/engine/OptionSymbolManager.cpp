@@ -83,13 +83,32 @@ bool OptionSymbolManager::initialize() {
         return false;
     }
     
-    // Sort expiries to find the nearest
+    // Sort expiries to find the nearest FUTURE expiry
     std::vector<std::string> sorted_expiries(expiries.begin(), expiries.end());
+    
+    auto now = std::time(nullptr);
+    // Rough normalization to start of day for comparison
+    auto now_tm = *std::localtime(&now);
+    now_tm.tm_hour = 0; now_tm.tm_min = 0; now_tm.tm_sec = 0;
+    auto today_start = std::mktime(&now_tm);
+
     std::sort(sorted_expiries.begin(), sorted_expiries.end(), [](const std::string& a, const std::string& b) {
         return parse_date(a) < parse_date(b);
     });
     
-    nearest_expiry_ = sorted_expiries.front();
+    // Find the first expiry that is >= today
+    nearest_expiry_ = "";
+    for (const auto& exp : sorted_expiries) {
+        if (parse_date(exp) >= today_start) {
+            nearest_expiry_ = exp;
+            break;
+        }
+    }
+
+    if (nearest_expiry_.empty()) {
+        std::cerr << "[ERROR] No future expiries found! Using latest available fallback.\n";
+        nearest_expiry_ = sorted_expiries.back();
+    }
     std::cout << "[INFO] Nearest Expiry Identified: " << nearest_expiry_ << "\n";
     
     // Parse expiry date for Greeks calculations

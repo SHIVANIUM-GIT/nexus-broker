@@ -48,26 +48,35 @@ public:
         }
 
         // Unsubscribe from obsolete contracts
+        std::string unsub_batch;
         std::vector<std::string> to_unsubscribe;
         for (const auto& inst : active_subscriptions_) {
             if (required_instruments.find(inst) == required_instruments.end()) {
                 to_unsubscribe.push_back(inst);
+                if (!unsub_batch.empty()) unsub_batch += "#";
+                unsub_batch += inst;
             }
         }
 
+        if (!unsub_batch.empty()) {
+            client_->unsubscribe(unsub_batch);
+        }
         for (const auto& inst : to_unsubscribe) {
-            client_->unsubscribe(inst);
             active_subscriptions_.erase(inst);
-            // std::cout << "[SubMgr] Unsubscribed: " << inst << "\n";
         }
 
         // Subscribe to new contracts
+        std::string sub_batch;
         for (const auto& inst : required_instruments) {
             if (active_subscriptions_.find(inst) == active_subscriptions_.end()) {
-                client_->subscribe(inst);
+                if (!sub_batch.empty()) sub_batch += "#";
+                sub_batch += inst;
                 active_subscriptions_.insert(inst);
-                // std::cout << "[SubMgr] Subscribed: " << inst << "\n";
             }
+        }
+        
+        if (!sub_batch.empty()) {
+            client_->subscribe(sub_batch);
         }
 
         current_atm_ = new_atm;
