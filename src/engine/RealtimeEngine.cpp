@@ -13,7 +13,7 @@ RealtimeEngine::RealtimeEngine(shoonyacpp::NorenWebsocket &ws,
   md_cache_ = std::make_unique<MarketDataCache>();
   // ATM ± 5 strikes strategy, ATM ± 10 strikes buffer
   sub_mgr_ = std::make_unique<SubscriptionManager>(ws_wrapper_.get(),
-                                                   strike_interval_, 5, 10);
+                                                   strike_interval_, 5, 15);
 
   token_map_[underlying_token_] = {true, 0.0, ' '};
 }

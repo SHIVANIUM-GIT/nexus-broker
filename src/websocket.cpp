@@ -89,6 +89,10 @@ void NorenWebsocket::connect() {
             std::string msg = beast::buffers_to_string(buffer.data());
             buffer.consume(buffer.size());
             
+            if (msg.find("Error") != std::string::npos || msg.find("Invalid") != std::string::npos) {
+                std::cerr << "[Shoonya API Message] " << msg << "\n";
+            }
+            
             if (on_tick_callback_) {
                 on_tick_callback_(msg);
             }
